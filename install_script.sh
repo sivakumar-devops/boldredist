@@ -34,7 +34,7 @@ error() {
 # Function to update system package list
 update_system() {
     info "Updating package list..."
-    if ! sudo apt update >> "$LOG_FILE" 2>&1; then
+    if ! sudo apt-get update >> "$LOG_FILE" 2>&1; then
         error "Failed to update package list."
         exit 1
     fi
@@ -62,7 +62,7 @@ install_package() {
     if dpkg -l | grep -q "$package_name"; then
         if [ "$force_reinstall" == "true" ]; then
             info "Reinstalling $package_name..."
-            if ! sudo apt install -y --reinstall $package_name >> "$LOG_FILE" 2>&1; then
+            if ! sudo apt-get install -y --reinstall $package_name >> "$LOG_FILE" 2>&1; then
                 error "Failed to reinstall $package_name."
                 exit 1
             fi
@@ -71,7 +71,7 @@ install_package() {
         fi
     else
         info "Installing $package_name..."
-        if ! sudo apt install -y $package_name >> "$LOG_FILE" 2>&1; then
+        if ! sudo apt-get install -y $package_name >> "$LOG_FILE" 2>&1; then
                 error "Failed to install $package_name."
                 exit 1
         fi
@@ -606,7 +606,7 @@ main() {
     # Return to the original directory
     popd > /dev/null
 
-    info "Bold Bi installation installation..."
+    info "Bold Bi installation..."
     install_boldbi
 
     info "configure nginx..."
