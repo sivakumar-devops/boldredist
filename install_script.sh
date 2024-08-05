@@ -328,8 +328,7 @@ echo "    bash install-boldbi.sh -i "$install_type" \
 }
 
 configure_nginx() {
-
-       # Variables
+    # Variables
     NGINX_SITES_AVAILABLE="/etc/nginx/sites-available"
     NGINX_SITES_ENABLED="/etc/nginx/sites-enabled"
     WORDPRESS_CONFIG="wordpress"
@@ -342,27 +341,27 @@ server {
     listen 80;
     server_name your_domain www.your_domain;
     root /var/www/wordpress;
- 
+
     index index.php index.html index.htm;
 
     # Ensure to include proper logging if needed
     access_log /var/log/nginx/wordpress_access.log;
     error_log /var/log/nginx/wordpress_error.log;
- 
+
     location / {
-        try_files $uri $uri/ /index.php?$args;
+        try_files \$uri \$uri/ /index.php?\$args;
     }
- 
-    location ~ \.php$ {
+
+    location ~ \.php\$ {
         include snippets/fastcgi-php.conf;
         fastcgi_pass unix:/var/run/php/php8.1-fpm.sock;
-        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
         include fastcgi_params;
     }
- 
+
     #location = /favicon.ico { log_not_found off; access_log off; }
     #location = /robots.txt { log_not_found off; access_log off; allow all; }
-    #location ~* \.(css|gif|ico|jpeg|jpg|js|png)$ {
+    #location ~* \.(css|gif|ico|jpeg|jpg|js|png)\$ {
     #    expires max;
     #    log_not_found off;
     #}
@@ -370,7 +369,7 @@ server {
     location ~ /\.ht {
         deny all;
     }
-include /etc/nginx/sites-available/boldbi;
+    include /etc/nginx/sites-available/boldbi;
 }
 EOF
     }
@@ -512,7 +511,6 @@ EOF
 
     echo "NGINX configuration for WordPress and BoldBI has been set up and reloaded."
 }
-
 
 # Main function to execute the script
 main() {
