@@ -302,7 +302,7 @@ install_boldbi() {
 
     info "Executing installation command..."
 
-echo "    bash install-boldbi.sh -i "$install_type" \
+    bash install-boldbi.sh -i "$install_type" \
                            -u "$user" \
                            -h "$host_url/dashboard" \
                            -n "$nginx" \
@@ -322,7 +322,7 @@ echo "    bash install-boldbi.sh -i "$install_type" \
                            -favicon "$favicon" \
                            -footerlogo "$footer_logo" \
                            -sitename "$site_name" \
-                           -siteidentifier "$site_identifier" "
+                           -siteidentifier "$site_identifier"
 
     info "Bold BI package installed successfully."
 }
