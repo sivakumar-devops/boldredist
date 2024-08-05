@@ -118,6 +118,46 @@ EOF
     info "MySQL database and user created successfully."
 }
 
+# Function to create MySQL database and user for boldbi
+create_database_user_for_boldbi() {
+    local mysql_user="root"
+    local mysql_psw=""
+    #local db_name="mysql"
+    local db_user="boldbiuser"
+    local db_pass="BoldBi@123"  # Replace with actual user password
+
+    info "Creating MySQL database and user..."
+
+    # Create or update the .my.cnf file
+    cat > ~/.my.cnf <<EOF
+[client]
+user=$mysql_user
+password="$mysql_psw"
+EOF
+
+    # Set file permissions
+    chmod 600 ~/.my.cnf
+
+    # Use `mysql` command with the .my.cnf file for authentication
+    mysql <<EOF
+    # -- Check if the database exists
+    # CREATE DATABASE IF NOT EXISTS $db_name DEFAULT CHARACTER SET utf8 COLLATE utf8_unicode_ci;
+
+    -- Create the user if it does not exist
+    CREATE USER IF NOT EXISTS '$db_user'@'localhost' IDENTIFIED BY '$db_pass';
+
+    -- Grant permissions
+    GRANT ALL ON *.* TO '$db_user'@'localhost';
+    FLUSH PRIVILEGES;
+
+    -- Verify the database and user creation
+    SHOW DATABASES LIKE '$db_name';
+    SELECT user, host FROM mysql.user WHERE user = '$db_user';
+EOF
+
+    info "MySQL database and user created successfully."
+}
+
 # Function to install WordPress
 install_wordpress() {
     info "Starting WordPress installation..."
@@ -225,6 +265,9 @@ install_boldbi() {
 
     # Define the package file name
     package_file="BoldBIEnterpriseEdition_Linux.zip"
+
+    # Create database user for Bold BI.
+    create_database_user_for_boldbi
 
     # Remove the package file if it already exists
     if [ -f "$package_file" ]; then
