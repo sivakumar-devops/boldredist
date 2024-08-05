@@ -18,17 +18,17 @@ LOG_FILE="install.log"
 
 # Function to print info messages in green
 info() {
-    echo -e "${GREEN}Info: $1${NC}" | tee -a "$LOG_FILE"
+    echo -e "${GREEN}Info: ${NC}$1" | tee -a "$LOG_FILE"
 }
 
 # Function to print warning messages in yellow
 warn() {
-    echo -e "${YELLOW}Warning: $1${NC}" | tee -a "$LOG_FILE"
+    echo -e "${YELLOW}Warning: ${NC}$1" | tee -a "$LOG_FILE"
 }
 
 # Function to print error messages in red
 error() {
-    echo -e "${RED}Error: $1${NC}" | tee -a "$LOG_FILE"
+    echo -e "${RED}Error: ${NC}$1" | tee -a "$LOG_FILE"
 }
 
 # Function to update system package list
@@ -108,6 +108,46 @@ EOF
 
     -- Grant permissions
     GRANT ALL ON $db_name.* TO '$db_user'@'localhost';
+    FLUSH PRIVILEGES;
+
+    -- Verify the database and user creation
+    SHOW DATABASES LIKE '$db_name';
+    SELECT user, host FROM mysql.user WHERE user = '$db_user';
+EOF
+
+    info "MySQL database and user created successfully."
+}
+
+# Function to create MySQL database and user for boldbi
+create_database_user_for_boldbi() {
+    local mysql_user="root"
+    local mysql_psw=""
+    #local db_name="mysql"
+    local db_user="boldbiuser"
+    local db_pass="BoldBi@123"  # Replace with actual user password
+
+    info "Creating MySQL database and user..."
+
+    # Create or update the .my.cnf file
+    cat > ~/.my.cnf <<EOF
+[client]
+user=$mysql_user
+password="$mysql_psw"
+EOF
+
+    # Set file permissions
+    chmod 600 ~/.my.cnf
+
+    # Use `mysql` command with the .my.cnf file for authentication
+    mysql <<EOF
+    # -- Check if the database exists
+    # CREATE DATABASE IF NOT EXISTS $db_name DEFAULT CHARACTER SET utf8 COLLATE utf8_unicode_ci;
+
+    -- Create the user if it does not exist
+    CREATE USER IF NOT EXISTS '$db_user'@'localhost' IDENTIFIED BY '$db_pass';
+
+    -- Grant permissions
+    GRANT ALL ON *.* TO '$db_user'@'localhost';
     FLUSH PRIVILEGES;
 
     -- Verify the database and user creation
@@ -221,7 +261,10 @@ setup_wp_config() {
 
 # Function to install Bold BI
 install_boldbi() {
-    info "Downloading and unzipping Bold BI package..."
+    # Create database user for Bold BI.
+    create_database_user_for_boldbi
+    
+    info "Downloading Bold BI package..."
 
     # Define the package file name
     package_file="BoldBIEnterpriseEdition_Linux.zip"
@@ -230,7 +273,7 @@ install_boldbi() {
     if [ -f "$package_file" ]; then
             rm "$package_file"
             if [ $? -ne 0 ]; then
-                    info "Failed to remove existing Bold BI package."
+                    error "Failed to remove existing Bold BI package."
                     exit 1
             fi
     fi
@@ -240,26 +283,25 @@ install_boldbi() {
 
     # Check if the download was successful
     if [ $? -ne 0 ]; then
-        info "Failed to download Bold BI package."
+        error "Failed to download Bold BI package."
         exit 1
     fi
-
-    # Unzip the downloaded package
+    info "Unzipping Bold BI package..."
     unzip BoldBIEnterpriseEdition_Linux.zip >> "$LOG_FILE" 2>&1
-        Unzip the downloaded package, replacing existing files
-        unzip -o "$package_file"
 
     # Check if the unzip was successful
     if [ $? -ne 0 ]; then
-        info "Failed to unzip Bold BI package."
+        error "Failed to unzip Bold BI package."
         exit 1
+    else
+        info "Unzipping completed successfully."
     fi
 
     cd BoldBIEnterpriseEdition-Linux || { info "Failed to change directory."; exit 1; }
 
     info "Executing installation command..."
 
-echo "    bash install-boldbi.sh -i "$install_type" \
+    bash install-boldbi.sh -i "$install_type" \
                            -u "$user" \
                            -h "$host_url/dashboard" \
                            -n "$nginx" \
@@ -279,9 +321,7 @@ echo "    bash install-boldbi.sh -i "$install_type" \
                            -favicon "$favicon" \
                            -footerlogo "$footer_logo" \
                            -sitename "$site_name" \
-                           -siteidentifier "$site_identifier" "
-
-    info "Bold BI package installed successfully."
+                           -siteidentifier "$site_identifier"
 }
 
 configure_nginx() {
@@ -291,9 +331,9 @@ configure_nginx() {
     WORDPRESS_CONFIG="wordpress"
     NGINX_RELOAD_CMD="systemctl reload nginx"
 
-    # Function to create configuration file
-    create_nginx_config() {
-        cat <<EOF > ${NGINX_SITES_AVAILABLE}/${WORDPRESS_CONFIG}
+    # Function to create WordPress configuration file
+    create_wordpress_config() {
+        cat <<EOF > ${NGINX_SITES_AVAILABLE}/wordpress
 server {
     listen 80;
     server_name your_domain www.your_domain;
@@ -301,6 +341,7 @@ server {
 
     index index.php index.html index.htm;
 
+    # Ensure to include proper logging if needed
     access_log /var/log/nginx/wordpress_access.log;
     error_log /var/log/nginx/wordpress_error.log;
 
@@ -315,111 +356,126 @@ server {
         include fastcgi_params;
     }
 
-    location = /favicon.ico { log_not_found off; access_log off; }
-    location = /robots.txt { log_not_found off; access_log off; allow all; }
-    location ~* \.(css|gif|ico|jpeg|jpg|js|png)\$ {
-        expires max;
-        log_not_found off;
-    }
+    #location = /favicon.ico { log_not_found off; access_log off; }
+    #location = /robots.txt { log_not_found off; access_log off; allow all; }
+    #location ~* \.(css|gif|ico|jpeg|jpg|js|png)\$ {
+    #    expires max;
+    #    log_not_found off;
+    #}
 
     location ~ /\.ht {
         deny all;
     }
-
-    # BoldBI Locations
-    location /dashboard/ {
-        root /var/www/bold-services/application/idp/web/wwwroot;
-        proxy_pass http://localhost:6500/dashboard/;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection keep-alive;
-        proxy_set_header Host \$http_host;
-        proxy_cache_bypass \$http_upgrade;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        fastcgi_buffers 16 16k;
-        fastcgi_buffer_size 32k;
+    include /etc/nginx/sites-available/boldbi;
+}
+EOF
     }
 
-    location /dashboard/api {
-        proxy_pass http://localhost:6501/dashboard/api;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection keep-alive;
-        proxy_set_header Host \$http_host;
-        proxy_cache_bypass \$http_upgrade;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
+    # Function to create BoldBI configuration file
+    create_boldbi_config() {
+        cat <<EOF > ${NGINX_SITES_AVAILABLE}/boldbi
+proxy_buffer_size 128k;
+proxy_buffers 4 256k;
+proxy_busy_buffers_size 256k;
+large_client_header_buffers 4 16k;
+proxy_read_timeout 300;
+proxy_connect_timeout 300;
+proxy_send_timeout 300;
+send_timeout 300;
+client_max_body_size 200M;
 
-    location /dashboard/ums {
-        root /var/www/bold-services/application/idp/ums;
-        proxy_pass http://localhost:6502/dashboard/ums;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection keep-alive;
-        proxy_set_header Host \$http_host;
-        proxy_cache_bypass \$http_upgrade;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
+location /dashboard/ {
+    root /var/www/bold-services/application/idp/web/wwwroot;
+    proxy_pass http://localhost:6500/dashboard/;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection keep-alive;
+    proxy_set_header Host \$http_host;
+    proxy_cache_bypass \$http_upgrade;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+    fastcgi_buffers 16 16k;
+    fastcgi_buffer_size 32k;
+}
 
-    location /dashboard/bi {
-        root /var/www/bold-services/application/bi/web/wwwroot;
-        proxy_pass http://localhost:6504/dashboard/bi;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection keep-alive;
-        proxy_set_header Host \$http_host;
-        proxy_cache_bypass \$http_upgrade;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
+location /dashboard/api {
+    proxy_pass http://localhost:6501/dashboard/api;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection keep-alive;
+    proxy_set_header Host \$http_host;
+    proxy_cache_bypass \$http_upgrade;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+}
 
-    location /dashboard/bi/api {
-        proxy_pass http://localhost:6505/dashboard/bi/api;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection keep-alive;
-        proxy_set_header Host \$http_host;
-        proxy_cache_bypass \$http_upgrade;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
+location /dashboard/ums {
+    root /var/www/bold-services/application/idp/ums;
+    proxy_pass http://localhost:6502/dashboard/ums;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection keep-alive;
+    proxy_set_header Host \$http_host;
+    proxy_cache_bypass \$http_upgrade;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+}
 
-    location /dashboard/bi/jobs {
-        proxy_pass http://localhost:6506/dashboard/bi/jobs;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection keep-alive;
-        proxy_set_header Host \$http_host;
-        proxy_cache_bypass \$http_upgrade;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
+location /dashboard/bi {
+    root /var/www/bold-services/application/bi/web/wwwroot;
+    proxy_pass http://localhost:6504/dashboard/bi;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection keep-alive;
+    proxy_set_header Host \$http_host;
+    proxy_cache_bypass \$http_upgrade;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+}
 
-    location /dashboard/bi/designer {
-        root /var/www/bold-services/application/bi/designer/wwwroot;
-        proxy_pass http://localhost:6507/dashboard/bi/designer;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection keep-alive;
-        proxy_set_header Host \$http_host;
-        proxy_cache_bypass \$http_upgrade;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
+location /dashboard/bi/api {
+    proxy_pass http://localhost:6505/dashboard/bi/api;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection keep-alive;
+    proxy_set_header Host \$http_host;
+    proxy_cache_bypass \$http_upgrade;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+}
 
-    location /dashboard/bi/designer/helper {
-        proxy_pass http://localhost:6507/dashboard/bi/designer/helper;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host \$http_host;
-        proxy_cache_bypass \$http_upgrade;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
+location /dashboard/bi/jobs {
+    proxy_pass http://localhost:6506/dashboard/bi/jobs;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection keep-alive;
+    proxy_set_header Host \$http_host;
+    proxy_cache_bypass \$http_upgrade;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+}
+
+location /dashboard/bi/designer {
+    root /var/www/bold-services/application/bi/designer/wwwroot;
+    proxy_pass http://localhost:6507/dashboard/bi/designer;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection keep-alive;
+    proxy_set_header Host \$http_host;
+    proxy_cache_bypass \$http_upgrade;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+}
+
+location /dashboard/bi/designer/helper {
+    proxy_pass http://localhost:6507/dashboard/bi/designer/helper;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host \$http_host;
+    proxy_cache_bypass \$http_upgrade;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
 }
 EOF
     }
@@ -431,19 +487,27 @@ EOF
         fi
     }
 
+    # Function to delete default site
+    delete_default_site() {
+        if [ -L ${NGINX_SITES_ENABLED}/default ]; then
+            rm ${NGINX_SITES_ENABLED}/default
+        fi
+    }
+
     # Function to reload NGINX
     reload_nginx() {
         ${NGINX_RELOAD_CMD}
     }
 
     # Main function execution
-    create_nginx_config
+    create_wordpress_config
+    create_boldbi_config
     enable_site
+    delete_default_site
     reload_nginx
 
     echo "NGINX configuration for WordPress and BoldBI has been set up and reloaded."
 }
-
 
 # Main function to execute the script
 main() {
