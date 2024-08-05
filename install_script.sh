@@ -18,17 +18,17 @@ LOG_FILE="install.log"
 
 # Function to print info messages in green
 info() {
-    echo -e "${GREEN}Info: $1${NC}" | tee -a "$LOG_FILE"
+    echo -e "${GREEN}Info: ${NC}$1" | tee -a "$LOG_FILE"
 }
 
 # Function to print warning messages in yellow
 warn() {
-    echo -e "${YELLOW}Warning: $1${NC}" | tee -a "$LOG_FILE"
+    echo -e "${YELLOW}Warning: ${NC}$1" | tee -a "$LOG_FILE"
 }
 
 # Function to print error messages in red
 error() {
-    echo -e "${RED}Error: $1${NC}" | tee -a "$LOG_FILE"
+    echo -e "${RED}Error: ${NC}$1" | tee -a "$LOG_FILE"
 }
 
 # Function to update system package list
@@ -261,19 +261,19 @@ setup_wp_config() {
 
 # Function to install Bold BI
 install_boldbi() {
-    info "Downloading and unzipping Bold BI package..."
+    # Create database user for Bold BI.
+    create_database_user_for_boldbi
+    
+    info "Downloading Bold BI package..."
 
     # Define the package file name
     package_file="BoldBIEnterpriseEdition_Linux.zip"
-
-    # Create database user for Bold BI.
-    create_database_user_for_boldbi
 
     # Remove the package file if it already exists
     if [ -f "$package_file" ]; then
             rm "$package_file"
             if [ $? -ne 0 ]; then
-                    info "Failed to remove existing Bold BI package."
+                    error "Failed to remove existing Bold BI package."
                     exit 1
             fi
     fi
@@ -283,19 +283,18 @@ install_boldbi() {
 
     # Check if the download was successful
     if [ $? -ne 0 ]; then
-        info "Failed to download Bold BI package."
+        error "Failed to download Bold BI package."
         exit 1
     fi
-
-    # Unzip the downloaded package
+    info "Unzipping Bold BI package..."
     unzip BoldBIEnterpriseEdition_Linux.zip >> "$LOG_FILE" 2>&1
-        Unzip the downloaded package, replacing existing files
-        unzip -o "$package_file"
 
     # Check if the unzip was successful
     if [ $? -ne 0 ]; then
-        info "Failed to unzip Bold BI package."
+        error "Failed to unzip Bold BI package."
         exit 1
+    else
+        info "Unzipping completed successfully."
     fi
 
     cd BoldBIEnterpriseEdition-Linux || { info "Failed to change directory."; exit 1; }
@@ -323,8 +322,6 @@ install_boldbi() {
                            -footerlogo "$footer_logo" \
                            -sitename "$site_name" \
                            -siteidentifier "$site_identifier"
-
-    info "Bold BI package installed successfully."
 }
 
 configure_nginx() {
